@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Beige theme - Light mode */
+    --background: 40 30% 98%;
+    --foreground: 30 10% 10%;
+    
+    --card: 40 25% 96%;
+    --card-foreground: 30 10% 10%;
+    
+    --primary: 35 80% 45%;
+    --primary-foreground: 40 30% 98%;
+    
+    --secondary: 40 15% 90%;
+    --secondary-foreground: 30 10% 20%;
+    
+    --muted: 40 15% 92%;
+    --muted-foreground: 30 10% 45%;
+    
+    --accent: 35 60% 90%;
+    --accent-foreground: 35 80% 35%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 40 20% 88%;
+    --input: 40 20% 88%;
+    --ring: 35 80% 45%;
+    
+    --radius: 0.75rem;
+  }
+  
+  .dark {
+    /* Beige theme - Dark mode */
+    --background: 30 15% 8%;
+    --foreground: 40 20% 95%;
+    
+    --card: 30 15% 12%;
+    --card-foreground: 40 20% 95%;
+    
+    --primary: 35 75% 55%;
+    --primary-foreground: 30 15% 8%;
+    
+    --secondary: 30 15% 18%;
+    --secondary-foreground: 40 20% 90%;
+    
+    --muted: 30 15% 15%;
+    --muted-foreground: 40 15% 60%;
+    
+    --accent: 35 50% 20%;
+    --accent-foreground: 35 75% 65%;
+    
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 30 15% 18%;
+    --input: 30 15% 18%;
+    --ring: 35 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Text balance for headings */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Glassmorphism effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-lg;
+  }
+  
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-accent-foreground bg-clip-text text-transparent;
+  }
+}

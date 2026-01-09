@@ -1,0 +1,293 @@
+// Prisma Schema for Chat Application
+// Database: PostgreSQL (Neon)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// User Models
+// ============================================
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  phone         String?  @unique
+  passwordHash  String?
+  emailVerified Boolean  @default(false)
+  status        UserStatus @default(ACTIVE)
+  isAdmin       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  username       Username?
+  profile        Profile?
+  otps           Otp[]
+  passwordResets PasswordReset[]
+  
+  // Follow relations
+  following   Follow[] @relation("Follower")
+  followers   Follow[] @relation("Following")
+  
+  // Block relations
+  blockedUsers  Block[] @relation("Blocker")
+  blockedByUsers Block[] @relation("Blocked")
+  
+  // Conversation relations
+  conversations ConversationParticipant[]
+  messages      Message[]
+  
+  // Admin relations
+  adminLogs     AdminLog[]
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+  DELETED
+}
+
+model Username {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  username  String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([username])
+}
+
+model Profile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  displayName String
+  bio         String?
+  photoUrl    String?
+  theme       ThemePreference @default(SYSTEM)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum ThemePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+// ============================================
+// Authentication Models
+// ============================================
+
+model Otp {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, code])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  pin       String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, pin])
+  @@index([expiresAt])
+}
+
+// ============================================
+// Follow / Connection Models
+// ============================================
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  status      FollowStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId, status])
+  @@index([followingId, status])
+}
+
+enum FollowStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ============================================
+// Block Model
+// ============================================
+
+model Block {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+// ============================================
+// Conversation Models
+// ============================================
+
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+  leftAt         DateTime?
+  lastReadAt     DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+// ============================================
+// Message Models
+// ============================================
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String
+  senderId       String
+  type           MessageType @default(TEXT)
+  content        String?
+  isViewOnce     Boolean  @default(false)
+  isDisappearing Boolean  @default(false)
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  media        MessageMedia[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([expiresAt])
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  STICKER
+  VIEW_ONCE
+}
+
+model MessageMedia {
+  id        String   @id @default(uuid())
+  messageId String
+  url       String
+  mimeType  String
+  size      Int
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+// ============================================
+// Admin Models
+// ============================================
+
+model AdminLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  actionType AdminActionType
+  targetType TargetType
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+enum AdminActionType {
+  VIEW_USER
+  RESTRICT_USER
+  UNRESTRICT_USER
+  DISABLE_MESSAGING
+  ENABLE_MESSAGING
+  VIEW_CONVERSATION
+  DELETE_CONVERSATION
+}
+
+enum TargetType {
+  USER
+  CONVERSATION
+  MESSAGE
+}

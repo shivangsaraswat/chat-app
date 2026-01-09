@@ -1,0 +1,6 @@
+packages:
+  - "app"
+  - "admin"
+  - "docs"
+  - "backend"
+  - "packages/*"
