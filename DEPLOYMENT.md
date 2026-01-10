@@ -8,7 +8,7 @@ This project is a monorepo containing a backend (Express), a client app (Next.js
 2. **Connect your Repository**.
 3. **Configure Service**:
    - **Runtime**: `Node`
-   - **Build Command**: `npm install -g pnpm && pnpm install && pnpm render-build`
+   - **Build Command**: `npm install -g pnpm && pnpm install --prod=false && pnpm render-build`
    - **Start Command**: `pnpm run start --filter=backend`
 4. **Environment Variables**:
    Add the following variables in the Render dashboard:

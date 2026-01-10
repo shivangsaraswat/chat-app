@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "render-build": "pnpm install && pnpm db:generate --filter=backend && pnpm run build --filter=backend",
+    "render-build": "pnpm db:generate --filter=backend && pnpm run build --filter=backend",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "clean": "turbo run clean && rm -rf node_modules",
