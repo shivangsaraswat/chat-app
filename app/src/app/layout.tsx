@@ -27,10 +27,7 @@ export const viewport: Viewport = {
     initialScale: 1,
     maximumScale: 1,
     userScalable: false,
-    themeColor: [
-        { media: '(prefers-color-scheme: light)', color: '#faf8f5' },
-        { media: '(prefers-color-scheme: dark)', color: '#1a1815' },
-    ],
+    themeColor: '#000000',
 };
 
 export default function RootLayout({
@@ -44,8 +41,10 @@ export default function RootLayout({
                 <link rel="icon" href="/favicon.ico" sizes="any" />
                 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
             </head>
-            <body className={`${inter.variable} font-sans`}>
-                <Providers>{children}</Providers>
+            <body className={`${inter.variable} font-sans bg-zinc-950 flex justify-center min-h-[100dvh]`}>
+                <div className="w-full max-w-[480px] bg-black min-h-[100dvh] relative shadow-2xl overflow-x-hidden border-x border-zinc-800">
+                    <Providers>{children}</Providers>
+                </div>
             </body>
         </html>
     );

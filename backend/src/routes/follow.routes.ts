@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler, AppError } from '../middleware/error.middleware.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 // Validation schemas
 const followRequestSchema = z.object({
@@ -98,6 +99,80 @@ router.post(
     })
 );
 
+// Check follow status between current user and target user
+router.get(
+    '/status/:userId',
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { userId: targetUserId } = req.params;
+
+        if (targetUserId === req.user.userId) {
+            return res.json({
+                success: true,
+                data: {
+                    canMessage: true,
+                    iAmFollowing: false,
+                    theyAreFollowing: false,
+                    isSelf: true,
+                },
+            });
+        }
+
+        // Check if I am following them (and accepted)
+        const iFollowThem = await prisma.follow.findFirst({
+            where: {
+                followerId: req.user.userId,
+                followingId: targetUserId,
+                status: 'ACCEPTED',
+            },
+        });
+
+        // Check if they are following me (and accepted)
+        const theyFollowMe = await prisma.follow.findFirst({
+            where: {
+                followerId: targetUserId,
+                followingId: req.user.userId,
+                status: 'ACCEPTED',
+            },
+        });
+
+        // Check if I have a pending request to them
+        const myPendingRequest = await prisma.follow.findFirst({
+            where: {
+                followerId: req.user.userId,
+                followingId: targetUserId,
+                status: 'PENDING',
+            },
+        });
+
+        // Check if they have a pending request to me  
+        const theirPendingRequest = await prisma.follow.findFirst({
+            where: {
+                followerId: targetUserId,
+                followingId: req.user.userId,
+                status: 'PENDING',
+            },
+        });
+
+        // Can message only if both are following each other (mutual)
+        const canMessage = !!(iFollowThem && theyFollowMe);
+
+        res.json({
+            success: true,
+            data: {
+                canMessage,
+                iAmFollowing: !!iFollowThem,
+                theyAreFollowing: !!theyFollowMe,
+                myRequestPending: !!myPendingRequest,
+                theirRequestPending: !!theirPendingRequest,
+                isSelf: false,
+            },
+        });
+    })
+);
+
 // Get pending requests (received)
 router.get(
     '/pending',
@@ -133,6 +208,108 @@ router.get(
                 },
                 createdAt: r.createdAt,
             })),
+        });
+    })
+);
+
+// Get followers list
+router.get(
+    '/:userId/followers',
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { userId } = req.params;
+        const cursor = req.query.cursor as string | undefined;
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+
+        const follows = await prisma.follow.findMany({
+            where: {
+                followingId: userId,
+                status: 'ACCEPTED',
+                ...(cursor && {
+                    createdAt: { lt: new Date(cursor) },
+                }),
+            },
+            include: {
+                follower: {
+                    include: {
+                        username: true,
+                        profile: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit + 1,
+        });
+
+        const hasMore = follows.length > limit;
+        const items = follows.slice(0, limit);
+
+        res.json({
+            success: true,
+            data: {
+                items: items.map((f) => ({
+                    id: f.follower.id,
+                    username: f.follower.username?.username,
+                    displayName: f.follower.profile?.displayName,
+                    photoUrl: f.follower.profile?.photoUrl,
+                    isFollowing: false, // Additional logic needed if we want to show "Follow back" status
+                })),
+                nextCursor: hasMore ? items[items.length - 1].createdAt.toISOString() : null,
+                hasMore,
+            },
+        });
+    })
+);
+
+// Get following list
+router.get(
+    '/:userId/following',
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { userId } = req.params;
+        const cursor = req.query.cursor as string | undefined;
+        const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+
+        const follows = await prisma.follow.findMany({
+            where: {
+                followerId: userId,
+                status: 'ACCEPTED',
+                ...(cursor && {
+                    createdAt: { lt: new Date(cursor) },
+                }),
+            },
+            include: {
+                following: {
+                    include: {
+                        username: true,
+                        profile: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit + 1,
+        });
+
+        const hasMore = follows.length > limit;
+        const items = follows.slice(0, limit);
+
+        res.json({
+            success: true,
+            data: {
+                items: items.map((f) => ({
+                    id: f.following.id,
+                    username: f.following.username?.username,
+                    displayName: f.following.profile?.displayName,
+                    photoUrl: f.following.profile?.photoUrl,
+                    isFollowing: true,
+                })),
+                nextCursor: hasMore ? items[items.length - 1].createdAt.toISOString() : null,
+                hasMore,
+            },
         });
     })
 );

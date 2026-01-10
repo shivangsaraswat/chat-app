@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Avatar, Button, Card, Input, Spinner } from '@chat-app/ui';
+import { Avatar, Button, Card, Input, Spinner, Modal } from '@chat-app/ui';
 import { LogOut, Moon, Sun, Monitor, Settings, Grid3X3, Bookmark, UserSquare2, X, Upload } from 'lucide-react';
 import { useAuth, useTheme } from '@/components/providers';
+import { SettingsModal } from '@/components/settings-modal';
+import { UsersListModal } from '@/components/users-list-modal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -24,20 +26,24 @@ interface Profile {
 
 export default function ProfilePage() {
     const router = useRouter();
-    const { tokens, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+    const { logout, isAuthenticated, isLoading: authLoading } = useAuth();
     const { theme, setTheme } = useTheme();
     const [profile, setProfile] = useState<Profile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [showSettings, setShowSettings] = useState(false);
+
+    // Modals
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [showUsersModal, setShowUsersModal] = useState(false);
+    const [usersModalTab, setUsersModalTab] = useState<'followers' | 'following'>('followers');
     const [showEditModal, setShowEditModal] = useState(false);
 
     // Edit form state
-    const [editDisplayName, setEditDisplayName] = useState('');
-    const [editBio, setEditBio] = useState('');
-    const [editPhotoUrl, setEditPhotoUrl] = useState('');
+    const [editForm, setEditForm] = useState({
+        displayName: '',
+        bio: '',
+        photoUrl: ''
+    });
     const [isSaving, setIsSaving] = useState(false);
-    const [editError, setEditError] = useState('');
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!authLoading && !isAuthenticated) {
@@ -46,26 +52,43 @@ export default function ProfilePage() {
     }, [authLoading, isAuthenticated, router]);
 
     useEffect(() => {
-        if (!tokens?.accessToken) return;
-
-        const fetchProfile = async () => {
-            try {
-                const res = await fetch(`${API_URL}/api/users/me`, {
-                    headers: { Authorization: `Bearer ${tokens.accessToken}` },
-                });
-                const data = await res.json();
-                if (data.success) {
-                    setProfile(data.data);
-                }
-            } catch {
-                // Handle error
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         fetchProfile();
-    }, [tokens?.accessToken]);
+    }, []);
+
+    const fetchProfile = async () => {
+        try {
+            // Get tokens from localStorage (stored as JSON object)
+            const storedTokens = localStorage.getItem('tokens');
+            if (!storedTokens) {
+                console.error('No tokens found in localStorage');
+                setIsLoading(false);
+                return;
+            }
+
+            const parsedTokens = JSON.parse(storedTokens);
+            const token = parsedTokens.accessToken;
+
+            console.log('Fetching profile with token:', token ? 'present' : 'missing');
+
+            const res = await fetch(`${API_URL}/api/users/me`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await res.json();
+            console.log('Profile API Response:', data);
+            if (data.success) {
+                setProfile(data.data);
+                console.log('Profile set:', data.data);
+            } else {
+                console.error('Profile fetch failed:', data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch profile:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleLogout = async () => {
         await logout();
@@ -73,10 +96,11 @@ export default function ProfilePage() {
     };
 
     const openEditModal = () => {
-        setEditDisplayName(profile?.profile?.displayName || '');
-        setEditBio(profile?.profile?.bio || '');
-        setEditPhotoUrl(profile?.profile?.photoUrl || '');
-        setEditError('');
+        setEditForm({
+            displayName: profile?.profile?.displayName || '',
+            bio: profile?.profile?.bio || '',
+            photoUrl: profile?.profile?.photoUrl || '',
+        });
         setShowEditModal(true);
     };
 
@@ -84,60 +108,57 @@ export default function ProfilePage() {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Convert to base64 for preview and storage
         const reader = new FileReader();
         reader.onloadend = () => {
-            setEditPhotoUrl(reader.result as string);
+            setEditForm((prev) => ({ ...prev, photoUrl: reader.result as string }));
         };
         reader.readAsDataURL(file);
     };
 
     const handleSaveProfile = async () => {
-        if (!tokens?.accessToken) return;
-
         setIsSaving(true);
-        setEditError('');
-
         try {
+            // Get token from tokens object
+            const storedTokens = localStorage.getItem('tokens');
+            const token = storedTokens ? JSON.parse(storedTokens).accessToken : null;
             const res = await fetch(`${API_URL}/api/users/profile`, {
-                method: 'PUT',
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${tokens.accessToken}`,
+                    Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({
-                    displayName: editDisplayName,
-                    bio: editBio,
-                    photoUrl: editPhotoUrl || undefined,
-                }),
+                body: JSON.stringify(editForm),
             });
-
             const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || 'Failed to update profile');
+            if (data.success) {
+                setProfile((prev) =>
+                    prev
+                        ? {
+                            ...prev,
+                            profile: { ...prev.profile, ...data.data },
+                        }
+                        : null
+                );
+                setShowEditModal(false);
             }
-
-            // Update local profile state
-            setProfile(prev => prev ? {
-                ...prev,
-                profile: {
-                    ...prev.profile,
-                    displayName: editDisplayName,
-                    bio: editBio,
-                    photoUrl: editPhotoUrl,
-                },
-            } : null);
-
-            setShowEditModal(false);
-        } catch (err) {
-            setEditError(err instanceof Error ? err.message : 'Failed to save');
+        } catch (error) {
+            console.error('Failed to update profile:', error);
         } finally {
             setIsSaving(false);
         }
     };
 
-    if (authLoading || isLoading) {
+    const openFollowers = () => {
+        setUsersModalTab('followers');
+        setShowUsersModal(true);
+    };
+
+    const openFollowing = () => {
+        setUsersModalTab('following');
+        setShowUsersModal(true);
+    };
+
+    if (authLoading || (!profile && isLoading)) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <Spinner size="lg" />
@@ -145,241 +166,184 @@ export default function ProfilePage() {
         );
     }
 
-    const themeOptions = [
-        { value: 'light', label: 'Light', icon: Sun },
-        { value: 'dark', label: 'Dark', icon: Moon },
-        { value: 'system', label: 'System', icon: Monitor },
-    ];
-
     return (
-        <div className="flex flex-col min-h-screen bg-background">
+        <div className="flex flex-col min-h-screen bg-background pb-20">
             {/* Header */}
-            <header className="flex items-center justify-between px-4 py-3 border-b bg-card/50 backdrop-blur-lg sticky top-0 z-10">
-                <h1 className="text-xl font-semibold">{profile?.username || 'Profile'}</h1>
+            <header className="flex items-center justify-between px-6 py-4 bg-background/80 backdrop-blur-xl sticky top-0 z-40 border-b border-white/5">
+                <h1 className="text-xl font-bold tracking-tight flex items-center gap-1">
+                    @{profile?.username || 'username'}
+                </h1>
                 <button
-                    onClick={() => setShowSettings(!showSettings)}
-                    className="p-2 rounded-lg hover:bg-muted"
+                    onClick={() => setShowSettingsModal(true)}
+                    className="p-2 -mr-2 rounded-full hover:bg-white/10 transition-colors"
                 >
-                    <Settings className="w-5 h-5" />
+                    <Settings className="w-6 h-6" />
                 </button>
             </header>
 
-            <div className="flex-1 p-4 max-w-2xl mx-auto w-full">
-                {/* Instagram-style Profile Header */}
-                <div className="flex items-start gap-6 mb-4">
-                    {/* Avatar - clickable to edit */}
-                    <button onClick={openEditModal} className="relative group">
-                        <Avatar
-                            src={profile?.profile?.photoUrl}
-                            alt={profile?.profile?.displayName}
-                            fallback={profile?.profile?.displayName || profile?.username || profile?.email}
-                            size="xl"
-                        />
-                        <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                            <Upload className="w-5 h-5 text-white" />
-                        </div>
-                    </button>
-
-                    {/* Stats */}
-                    <div className="flex-1 flex justify-around pt-2">
-                        <div className="text-center">
-                            <p className="text-xl font-semibold">0</p>
-                            <p className="text-sm text-muted-foreground">Posts</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-xl font-semibold">{profile?.followersCount || 0}</p>
-                            <p className="text-sm text-muted-foreground">Followers</p>
-                        </div>
-                        <div className="text-center">
-                            <p className="text-xl font-semibold">{profile?.followingCount || 0}</p>
-                            <p className="text-sm text-muted-foreground">Following</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Name and bio */}
-                <div className="mb-4">
-                    <h2 className="font-semibold">
-                        {profile?.profile?.displayName || profile?.username || 'User'}
-                    </h2>
-                    {profile?.profile?.bio && (
-                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-                            {profile.profile.bio}
-                        </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">{profile?.email}</p>
-                </div>
-
-                {/* Edit profile button */}
-                <Button variant="secondary" className="w-full mb-6" onClick={openEditModal}>
-                    Edit Profile
-                </Button>
-
-                {/* Settings Panel (collapsible) */}
-                {showSettings && (
-                    <div className="space-y-4 mb-6">
-                        {/* Theme Selection */}
-                        <Card>
-                            <div className="p-3 border-b">
-                                <h3 className="font-medium text-sm">Appearance</h3>
+            <div className="flex-1 w-full">
+                <div className="px-6 pt-6 pb-2">
+                    {/* Instagram-style Profile Header */}
+                    <div className="flex items-center gap-8 mb-6">
+                        {/* Avatar - clickable to edit */}
+                        <button onClick={openEditModal} className="relative group shrink-0">
+                            <div className="p-1 rounded-full border-2 border-white/10">
+                                <Avatar
+                                    src={profile?.profile?.photoUrl}
+                                    alt={profile?.profile?.displayName}
+                                    fallback={profile?.profile?.displayName || profile?.username || profile?.email}
+                                    className="w-20 h-20"
+                                />
                             </div>
-                            <div className="p-1">
-                                {themeOptions.map((option) => (
-                                    <button
-                                        key={option.value}
-                                        onClick={() => setTheme(option.value as 'light' | 'dark' | 'system')}
-                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-sm ${theme === option.value
-                                            ? 'bg-primary/10 text-primary'
-                                            : 'hover:bg-muted'
-                                            }`}
-                                    >
-                                        <option.icon className="w-4 h-4" />
-                                        <span>{option.label}</span>
-                                        {theme === option.value && (
-                                            <span className="ml-auto text-primary">✓</span>
-                                        )}
-                                    </button>
-                                ))}
+                            <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Upload className="w-6 h-6 text-white" />
                             </div>
-                        </Card>
+                        </button>
 
-                        {/* Logout */}
-                        <Card>
+                        {/* Stats */}
+                        <div className="flex-1 flex justify-between pr-4">
+                            <div className="text-center flex flex-col items-center cursor-pointer hover:opacity-70 transition-opacity">
+                                <p className="text-lg font-bold">0</p>
+                                <p className="text-xs text-muted-foreground">Posts</p>
+                            </div>
                             <button
-                                onClick={handleLogout}
-                                className="w-full flex items-center gap-3 p-4 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg"
+                                onClick={openFollowers}
+                                className="text-center flex flex-col items-center cursor-pointer hover:opacity-70 transition-opacity"
                             >
-                                <LogOut className="w-5 h-5" />
-                                <span>Log out</span>
+                                <p className="text-lg font-bold">{profile?.followersCount || 0}</p>
+                                <p className="text-xs text-muted-foreground">Followers</p>
                             </button>
-                        </Card>
+                            <button
+                                onClick={openFollowing}
+                                className="text-center flex flex-col items-center cursor-pointer hover:opacity-70 transition-opacity"
+                            >
+                                <p className="text-lg font-bold">{profile?.followingCount || 0}</p>
+                                <p className="text-xs text-muted-foreground">Following</p>
+                            </button>
+                        </div>
                     </div>
-                )}
+
+                    {/* Name and bio */}
+                    <div className="mb-6 space-y-1">
+                        <h2 className="font-bold text-lg">
+                            {profile?.profile?.displayName || profile?.username || profile?.email?.split('@')[0] || 'Name'}
+                        </h2>
+                        {profile?.profile?.bio && (
+                            <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                                {profile?.profile?.bio}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Edit profile button */}
+                    <Button variant="outline" className="w-full mb-8 rounded-xl border-white/10 bg-white/5 hover:bg-white/10 h-10 font-medium" onClick={openEditModal}>
+                        Edit Profile
+                    </Button>
+                </div>
 
                 {/* Tabs */}
-                <div className="border-t">
+                <div className="border-t border-white/5">
                     <div className="flex">
-                        <button className="flex-1 py-3 flex justify-center border-b-2 border-foreground">
-                            <Grid3X3 className="w-5 h-5" />
+                        <button className="flex-1 py-3 flex justify-center border-b-2 border-white text-white">
+                            <Grid3X3 className="w-6 h-6" />
                         </button>
-                        <button className="flex-1 py-3 flex justify-center text-muted-foreground">
-                            <Bookmark className="w-5 h-5" />
+                        <button className="flex-1 py-3 flex justify-center text-zinc-600 hover:text-zinc-400 transition-colors">
+                            <Bookmark className="w-6 h-6" />
                         </button>
-                        <button className="flex-1 py-3 flex justify-center text-muted-foreground">
-                            <UserSquare2 className="w-5 h-5" />
+                        <button className="flex-1 py-3 flex justify-center text-zinc-600 hover:text-zinc-400 transition-colors">
+                            <UserSquare2 className="w-6 h-6" />
                         </button>
                     </div>
 
                     {/* Empty posts grid */}
-                    <div className="flex justify-center py-12 text-muted-foreground">
-                        <p className="text-sm">No posts yet</p>
+                    <div className="grid grid-cols-3 gap-0.5 p-0.5">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
+                            <div key={i} className="aspect-square bg-zinc-900/30 hover:bg-zinc-800/50 transition-colors flex items-center justify-center cursor-pointer">
+                                {i === 1 && <p className="text-xs text-muted-foreground p-4 text-center">No posts yet</p>}
+                            </div>
+                        ))}
                     </div>
                 </div>
-            </div>
 
-            {/* Edit Profile Modal */}
-            {showEditModal && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-                    onClick={() => setShowEditModal(false)}
+                {/* Edit Profile Modal */}
+                <Modal
+                    isOpen={showEditModal}
+                    onClose={() => setShowEditModal(false)}
+                    title="Edit Profile"
                 >
-                    <div
-                        className="bg-card w-full max-w-md rounded-2xl p-6 space-y-6 animate-in zoom-in-95"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-semibold">Edit Profile</h2>
-                            <button
-                                onClick={() => setShowEditModal(false)}
-                                className="p-2 rounded-lg hover:bg-muted"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Profile Photo */}
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="relative">
-                                <Avatar
-                                    src={editPhotoUrl}
-                                    alt={editDisplayName}
-                                    fallback={editDisplayName || profile?.username}
-                                    size="xl"
+                    <div className="space-y-6">
+                        <div className="flex justify-center">
+                            <div className="relative group cursor-pointer">
+                                <div className="rounded-full overflow-hidden border-2 border-white/10">
+                                    <Avatar
+                                        src={editForm.photoUrl}
+                                        alt={editForm.displayName}
+                                        fallback={editForm.displayName}
+                                        className="w-24 h-24"
+                                    />
+                                </div>
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+                                    <Upload className="w-6 h-6 text-white" />
+                                </div>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    onChange={handleImageUpload}
                                 />
                             </div>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleImageUpload}
-                                accept="image/*"
-                                className="hidden"
-                            />
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Change Photo
-                            </Button>
                         </div>
 
-                        {/* Form Fields */}
                         <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Username</label>
-                                <Input
-                                    type="text"
-                                    value={profile?.username || ''}
-                                    disabled
-                                    inputSize="lg"
-                                    className="opacity-60 cursor-not-allowed"
-                                />
-                                <p className="text-xs text-muted-foreground">Username cannot be changed</p>
-                            </div>
-
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Display Name</label>
                                 <Input
-                                    type="text"
-                                    value={editDisplayName}
-                                    onChange={(e) => setEditDisplayName(e.target.value)}
-                                    placeholder="Your display name"
-                                    inputSize="lg"
+                                    value={editForm.displayName}
+                                    onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
+                                    placeholder="Your name"
+                                    className="bg-black/20 border-white/10"
                                 />
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Bio</label>
                                 <textarea
-                                    value={editBio}
-                                    onChange={(e) => setEditBio(e.target.value)}
-                                    placeholder="Tell us about yourself"
-                                    rows={3}
-                                    className="w-full px-4 py-3 rounded-xl bg-muted border-0 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                                    maxLength={150}
+                                    className="w-full min-h-[100px] px-3 py-2 rounded-xl bg-black/20 border border-white/10 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm resize-none"
+                                    value={editForm.bio}
+                                    onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                                    placeholder="Write something about yourself..."
                                 />
-                                <p className="text-xs text-muted-foreground text-right">{editBio.length}/150</p>
                             </div>
                         </div>
 
-                        {editError && (
-                            <p className="text-sm text-red-500 text-center">{editError}</p>
-                        )}
-
-                        {/* Save Button */}
-                        <Button
-                            className="w-full"
-                            size="lg"
-                            isLoading={isSaving}
-                            onClick={handleSaveProfile}
-                        >
-                            Save Changes
-                        </Button>
+                        <div className="flex justify-end pt-4">
+                            <Button
+                                onClick={handleSaveProfile}
+                                disabled={isSaving}
+                                className="w-full bg-primary hover:bg-primary/90 text-white rounded-xl h-12 font-semibold"
+                            >
+                                {isSaving ? <Spinner size="sm" className="text-white" /> : 'Save Changes'}
+                            </Button>
+                        </div>
                     </div>
-                </div>
-            )}
+                </Modal>
+
+                {/* Settings Modal */}
+                <SettingsModal
+                    isOpen={showSettingsModal}
+                    onClose={() => setShowSettingsModal(false)}
+                />
+
+                {/* Users List Modal */}
+                {profile && (
+                    <UsersListModal
+                        isOpen={showUsersModal}
+                        onClose={() => setShowUsersModal(false)}
+                        initialTab={usersModalTab}
+                        userId={profile.id}
+                    />
+                )}
+            </div>
         </div>
     );
 }

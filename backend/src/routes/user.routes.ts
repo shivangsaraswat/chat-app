@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler, AppError } from '../middleware/error.middleware.js';
@@ -6,7 +7,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 import { normalizeUsername, isValidUsername } from '@chat-app/utils';
 import { APP_CONSTANTS } from '@chat-app/config';
 
-const router = Router();
+const router: RouterType = Router();
 
 // Validation schemas
 const usernameSchema = z.object({

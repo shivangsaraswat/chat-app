@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
@@ -11,7 +12,7 @@ import { authRateLimiter } from '../middleware/rateLimiter.middleware.js';
 import { normalizeUsername, isValidUsername } from '@chat-app/utils';
 import { APP_CONSTANTS } from '@chat-app/config';
 
-const router = Router();
+const router: RouterType = Router();
 
 // ===========================================
 // Validation Schemas
@@ -206,6 +207,65 @@ router.post(
                     isAdmin: user.isAdmin,
                 },
             },
+        });
+    })
+);
+
+// ===========================================
+// Change Password
+// ===========================================
+const changePasswordSchema = z.object({
+    currentPassword: z.string(),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+router.post(
+    '/change-password',
+    authRateLimiter,
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.userId },
+        });
+
+        if (!user || !user.passwordHash) {
+            throw new AppError('User not found', 404);
+        }
+
+        // Verify current password
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+
+        if (!isPasswordValid) {
+            throw new AppError('Incorrect current password', 401);
+        }
+
+        // Hash new password
+        const passwordHash = await bcrypt.hash(newPassword, 12);
+
+        // Update password
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { passwordHash },
+        });
+
+        // Revoke all sessions (optional, but good for security)
+        await JwtService.revokeAllUserTokens(user.id);
+
+        // Generate new tokens
+        const tokens = await JwtService.createTokenPair(
+            user.id,
+            user.email,
+            user.isAdmin
+        );
+
+        res.json({
+            success: true,
+            message: 'Password changed successfully',
+            data: tokens,
         });
     })
 );

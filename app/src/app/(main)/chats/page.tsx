@@ -121,104 +121,99 @@ export default function ChatsPage() {
     return (
         <div className="flex flex-col min-h-screen bg-background pb-24">
             {/* Header */}
-            <header className="flex items-center justify-between px-4 py-3 border-b bg-card/50 backdrop-blur-lg sticky top-0 z-10">
-                <h1 className="text-xl font-semibold">Chats</h1>
-                <div className="flex items-center gap-2">
+            <header className="flex items-center justify-between px-6 py-4 bg-background/80 backdrop-blur-xl sticky top-0 z-40 border-b border-white/5">
+                <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
+                <div className="flex items-center gap-3">
                     <Link
                         href="/explore"
-                        className="p-2 rounded-xl hover:bg-muted transition-colors"
+                        className="p-2.5 rounded-full hover:bg-white/10 transition-colors"
                     >
-                        <Search className="w-5 h-5" />
+                        <Search className="w-5 h-5 text-zinc-400" />
                     </Link>
                     <Link
                         href="/explore"
-                        className="p-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        className="p-2.5 rounded-full bg-white text-black hover:bg-zinc-200 transition-colors shadow-lg shadow-white/10"
                     >
                         <Plus className="w-5 h-5" />
                     </Link>
                 </div>
             </header>
 
-            {/* Conversation List with max-width */}
-            <div className="flex-1 overflow-y-auto">
-                <div className="max-w-2xl mx-auto">
-                    {conversations.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
-                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                <MessageCircle className="w-8 h-8 text-muted-foreground" />
-                            </div>
-                            <h2 className="text-lg font-medium mb-2">No conversations yet</h2>
-                            <p className="text-muted-foreground mb-6">
-                                Connect with people to start chatting
-                            </p>
-                            <Link
-                                href="/explore"
-                                className="px-6 py-2 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
-                            >
-                                Find people
-                            </Link>
+            {/* Conversation List */}
+            <div className="flex-1 overflow-y-auto px-2">
+                {conversations.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center min-h-[400px] p-8 text-center text-muted-foreground">
+                        <div className="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-6 shadow-inner">
+                            <MessageCircle className="w-10 h-10 opacity-50" />
                         </div>
-                    ) : (
-                        <div className="divide-y divide-border">
-                            {conversations.map((conversation) => {
-                                const hasUnread = (conversation.unreadCount || 0) > 0;
+                        <h2 className="text-xl font-semibold mb-2 text-foreground">No messages</h2>
+                        <p className="mb-8 text-sm opacity-60">
+                            Start connecting with your friends.
+                        </p>
+                        <Link
+                            href="/explore"
+                            className="px-8 py-3 rounded-full bg-white text-black font-semibold hover:bg-zinc-200 transition-colors"
+                        >
+                            Find people
+                        </Link>
+                    </div>
+                ) : (
+                    <div className="space-y-1 py-2">
+                        {conversations.map((conversation) => {
+                            const hasUnread = (conversation.unreadCount || 0) > 0;
 
-                                return (
-                                    <Link
-                                        key={conversation.id}
-                                        href={`/chats/${conversation.id}`}
-                                        className="flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors"
-                                    >
-                                        <div className="relative">
+                            return (
+                                <Link
+                                    key={conversation.id}
+                                    href={`/chats/${conversation.id}`}
+                                    className={`group flex items-center gap-4 p-3 rounded-2xl transition-all duration-200 ${hasUnread ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-white/5'
+                                        }`}
+                                >
+                                    <div className="relative shrink-0">
+                                        <div className={`rounded-full p-0.5 ${hasUnread ? 'bg-gradient-to-tr from-yellow-400 to-primary' : ''}`}>
                                             <Avatar
                                                 src={conversation.participant?.photoUrl}
                                                 alt={conversation.participant?.displayName}
                                                 fallback={conversation.participant?.displayName || conversation.participant?.username}
-                                                size="lg"
+                                                className="w-14 h-14 border-2 border-background"
                                             />
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className={`truncate ${hasUnread ? 'font-bold' : 'font-medium'}`}>
-                                                    {conversation.participant?.displayName ||
-                                                        conversation.participant?.username ||
-                                                        'Unknown'}
-                                                </span>
-                                                <div className="flex items-center gap-2">
-                                                    {conversation.lastMessage && (
-                                                        <span className={`text-xs ${hasUnread ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
-                                                            {formatMessageTime(conversation.lastMessage.createdAt)}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <p className={`text-sm truncate flex-1 ${hasUnread ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                                                    {conversation.lastMessage
-                                                        ? conversation.lastMessage.type === 'TEXT'
-                                                            ? conversation.lastMessage.senderId === user?.id
-                                                                ? `You: ${conversation.lastMessage.content}`
-                                                                : conversation.lastMessage.content
-                                                            : conversation.lastMessage.type === 'IMAGE'
-                                                                ? '📷 Photo'
-                                                                : conversation.lastMessage.type === 'FILE'
-                                                                    ? '📎 File'
-                                                                    : 'Message'
-                                                        : 'Start a conversation'}
-                                                </p>
-                                                {hasUnread && (
-                                                    <span className="ml-2 flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-                                                        {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                                                    </span>
-                                                )}
-                                            </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className={`truncate text-[15px] ${hasUnread ? 'font-bold text-foreground' : 'font-medium text-zinc-300'}`}>
+                                                {conversation.participant?.displayName ||
+                                                    conversation.participant?.username ||
+                                                    'Unknown'}
+                                            </span>
                                         </div>
-                                    </Link>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+                                        <div className="flex items-center gap-2">
+                                            <p className={`text-[13px] truncate flex-1 leading-snug ${hasUnread ? 'text-white font-medium' : 'text-zinc-500'}`}>
+                                                {conversation.lastMessage
+                                                    ? conversation.lastMessage.type === 'TEXT'
+                                                        ? conversation.lastMessage.senderId === user?.id
+                                                            ? `You: ${conversation.lastMessage.content}`
+                                                            : conversation.lastMessage.content
+                                                        : conversation.lastMessage.type === 'IMAGE'
+                                                            ? '📷 Photo'
+                                                            : conversation.lastMessage.type === 'FILE'
+                                                                ? '📎 File'
+                                                                : 'Message'
+                                                    : 'Active now'}
+                                            </p>
+                                            <span className="text-[12px] text-zinc-600 shrink-0">
+                                                · {conversation.lastMessage ? formatMessageTime(conversation.lastMessage.createdAt) : ''}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {hasUnread && (
+                                        <div className="w-2.5 h-2.5 bg-primary rounded-full shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
+                                    )}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

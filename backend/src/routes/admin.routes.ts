@@ -1,10 +1,11 @@
 import { Router, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler, AppError } from '../middleware/error.middleware.js';
 import { authMiddleware, adminMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 // All admin routes require auth and admin middleware
 router.use(authMiddleware);

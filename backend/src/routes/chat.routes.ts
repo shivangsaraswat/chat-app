@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import type { Router as RouterType } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler, AppError } from '../middleware/error.middleware.js';
@@ -6,7 +7,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 import { encodeCursor, decodeCursor } from '@chat-app/utils';
 import { io } from '../index.js';
 
-const router = Router();
+const router: RouterType = Router();
 
 // Validation schemas
 const createConversationSchema = z.object({
@@ -15,8 +16,12 @@ const createConversationSchema = z.object({
 
 const sendMessageSchema = z.object({
     type: z.enum(['TEXT', 'IMAGE', 'FILE', 'STICKER', 'VIEW_ONCE']).default('TEXT'),
-    content: z.string().max(4000).optional(),
+    content: z.preprocess(
+        (val) => (val === null ? undefined : val),
+        z.string().max(4000).optional()
+    ),
     mediaUrl: z.string().url().optional(),
+    additionalMediaUrls: z.array(z.string().url()).optional(),
     isViewOnce: z.boolean().optional(),
     isDisappearing: z.boolean().optional(),
     expiresAt: z.string().datetime().optional(),
@@ -320,7 +325,7 @@ router.post(
         if (!req.user) throw new AppError('Unauthorized', 401);
 
         const { id } = req.params;
-        const { type, content, mediaUrl, isViewOnce, isDisappearing, expiresAt } =
+        const { type, content, mediaUrl, additionalMediaUrls, isViewOnce, isDisappearing, expiresAt } =
             sendMessageSchema.parse(req.body);
 
         // Verify user is participant
@@ -363,7 +368,12 @@ router.post(
             }
         }
 
-        // Create message
+        // Collect all media URLs
+        const allMediaUrls: string[] = [];
+        if (mediaUrl) allMediaUrls.push(mediaUrl);
+        if (additionalMediaUrls) allMediaUrls.push(...additionalMediaUrls);
+
+        // Create message with media
         const message = await prisma.message.create({
             data: {
                 conversationId: id,
@@ -373,13 +383,13 @@ router.post(
                 isViewOnce: isViewOnce ?? false,
                 isDisappearing: isDisappearing ?? false,
                 expiresAt: expiresAt ? new Date(expiresAt) : null,
-                ...(mediaUrl && {
+                ...(allMediaUrls.length > 0 && {
                     media: {
-                        create: {
-                            url: mediaUrl,
+                        create: allMediaUrls.map((url) => ({
+                            url,
                             mimeType: 'image/jpeg', // TODO: Detect from URL
                             size: 0,
-                        },
+                        })),
                     },
                 }),
             },
@@ -557,6 +567,83 @@ router.delete(
         res.json({
             success: true,
             data: { messageId, forEveryone },
+        });
+    })
+);
+
+// Get conversation media (shared photos, videos, files)
+router.get(
+    '/:id/media',
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { id } = req.params;
+        const type = req.query.type as string | undefined;
+        const cursor = req.query.cursor as string | undefined;
+        const limit = Math.min(parseInt(req.query.limit as string) || 30, 100);
+
+        // Verify user is participant
+        const participant = await prisma.conversationParticipant.findFirst({
+            where: {
+                conversationId: id,
+                userId: req.user.userId,
+                leftAt: null,
+            },
+        });
+
+        if (!participant) {
+            throw new AppError('Conversation not found', 404);
+        }
+
+        // Build query for media messages
+        const whereClause: any = {
+            conversationId: id,
+            deletedAt: null,
+            media: {
+                some: {}, // Has at least one media item
+            },
+            ...(type && { type }), // Filter by type if provided (IMAGE, VIDEO, FILE)
+            ...(cursor && {
+                createdAt: { lt: new Date(decodeCursor(cursor)) },
+            }),
+        };
+
+        const messages = await prisma.message.findMany({
+            where: whereClause,
+            include: {
+                media: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit + 1,
+        });
+
+        const hasMore = messages.length > limit;
+        const items = messages.slice(0, limit);
+
+        // Flatten media items from messages
+        const mediaItems = items.flatMap((msg) =>
+            msg.media.map((m) => ({
+                id: m.id,
+                messageId: msg.id,
+                url: m.url,
+                mimeType: m.mimeType,
+                size: m.size,
+                width: m.width,
+                height: m.height,
+                createdAt: msg.createdAt,
+            }))
+        );
+
+        res.json({
+            success: true,
+            data: {
+                items: mediaItems,
+                nextCursor: hasMore
+                    ? encodeCursor(items[items.length - 1].createdAt.toISOString())
+                    : null,
+                hasMore,
+            },
         });
     })
 );

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageCircle, Compass, Bell, User } from 'lucide-react';
+import { Send, Compass, Bell, User } from 'lucide-react';
 import { Avatar } from '@chat-app/ui';
 import { useAuth, useSocket } from '@/components/providers';
 import { useEffect, useState } from 'react';
@@ -104,13 +104,13 @@ export function Dock() {
 
     const navItems = [
         { href: '/notifications', icon: Bell, label: 'Notifications', badge: notificationCount },
-        { href: '/chats', icon: MessageCircle, label: 'Chats', badge: unreadChatCount },
+        { href: '/chats', icon: Send, label: 'Chats', badge: unreadChatCount },
         { href: '/explore', icon: Compass, label: 'Explore' },
     ];
 
     return (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-            <nav className="flex items-center gap-1 px-2 py-2 rounded-2xl bg-card/80 backdrop-blur-xl border border-border/50 shadow-lg shadow-black/10">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-[280px]">
+            <nav className="flex items-center justify-between px-6 py-4 rounded-full bg-black/40 backdrop-blur-2xl border border-white/10 shadow-2xl shadow-black/50 ring-1 ring-white/5">
                 {/* Left side - Notifications */}
                 {navItems.map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -118,33 +118,28 @@ export function Dock() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`relative flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${isActive
-                                ? 'bg-primary text-primary-foreground scale-110 shadow-md'
-                                : 'hover:bg-muted hover:scale-105'
+                            className={`relative flex items-center justify-center transition-all duration-300 ${isActive
+                                ? 'text-primary scale-110 drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]'
+                                : 'text-muted-foreground hover:text-foreground hover:scale-105'
                                 }`}
                         >
-                            <item.icon className="w-5 h-5" />
+                            <item.icon className="w-6 h-6" strokeWidth={isActive ? 2.5 : 2} />
                             {item.badge && item.badge > 0 && (
-                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium px-1">
-                                    {item.badge > 99 ? '99+' : item.badge}
-                                </span>
+                                <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-black" />
                             )}
                             {/* Active indicator dot */}
                             {isActive && (
-                                <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary-foreground" />
+                                <span className="absolute -bottom-3 w-1 h-1 rounded-full bg-primary shadow-[0_0_8px_currentColor]" />
                             )}
                         </Link>
                     );
                 })}
 
-                {/* Divider */}
-                <div className="w-px h-8 bg-border/50 mx-1" />
-
                 {/* Right side - Profile */}
                 <Link
                     href="/profile"
-                    className={`relative flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-200 ${pathname === '/profile'
-                        ? 'ring-2 ring-primary scale-110'
+                    className={`relative flex items-center justify-center transition-all duration-300 ${pathname === '/profile'
+                        ? 'ring-2 ring-primary scale-105 rounded-full'
                         : 'hover:scale-105'
                         }`}
                 >
@@ -153,15 +148,12 @@ export function Dock() {
                             src={userPhoto}
                             alt={user?.email}
                             fallback={user?.email}
-                            size="default"
+                            className="w-7 h-7"
                         />
                     ) : (
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                        <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
                             <User className="w-4 h-4 text-muted-foreground" />
                         </div>
-                    )}
-                    {pathname === '/profile' && (
-                        <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary" />
                     )}
                 </Link>
             </nav>

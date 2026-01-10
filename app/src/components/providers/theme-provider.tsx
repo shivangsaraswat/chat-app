@@ -13,8 +13,8 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-    const [theme, setTheme] = useState<Theme>('system');
-    const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+    const [theme, setTheme] = useState<Theme>('dark');
+    const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('dark');
 
     useEffect(() => {
         // Load saved theme
@@ -35,14 +35,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
         const applyTheme = (t: Theme) => {
             const resolved = t === 'system' ? getSystemTheme() : t;
+            console.log('Applying theme:', t, '-> Resolved:', resolved);
             setResolvedTheme(resolved);
 
             root.classList.remove('light', 'dark');
             root.classList.add(resolved);
+            console.log('HTML classes:', root.classList.toString());
         };
 
         applyTheme(theme);
         localStorage.setItem('theme', theme);
+        console.log('Theme saved to localStorage:', theme);
 
         // Listen for system theme changes
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
