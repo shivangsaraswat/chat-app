@@ -5,7 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "tsx watch src/index.ts",
-        "build": "npx esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:bcryptjs --external:fsevents",
+        "build": "npx esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --external:bcryptjs --external:fsevents --external:@prisma/client --external:prisma --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
         "start": "node dist/index.js",
         "start:dev": "tsx watch src/index.ts",
         "lint": "eslint src/",
