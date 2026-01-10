@@ -215,9 +215,11 @@ model Message {
   id             String   @id @default(uuid())
   conversationId String
   senderId       String
+  replyToId      String?  // Reply to another message
   type           MessageType @default(TEXT)
   content        String?
   isViewOnce     Boolean  @default(false)
+  viewedAt       DateTime?  // When view-once message was opened by recipient
   isDisappearing Boolean  @default(false)
   expiresAt      DateTime?
   createdAt      DateTime @default(now())
@@ -226,11 +228,14 @@ model Message {
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReplies")
   media        MessageMedia[]
 
   @@index([conversationId, createdAt])
   @@index([senderId])
   @@index([expiresAt])
+  @@index([replyToId])
 }
 
 enum MessageType {

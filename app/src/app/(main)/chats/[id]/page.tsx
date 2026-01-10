@@ -30,6 +30,7 @@ interface Message {
     }>;
     createdAt: string;
     deletedAt?: string;
+    viewedAt?: string;  // Server-side tracking for view-once
 }
 
 interface Participant {
@@ -75,8 +76,7 @@ export default function ChatPage() {
     const [uploadingFile, setUploadingFile] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // View-once tracking (messages already viewed)
-    const [viewedOnceMessages, setViewedOnceMessages] = useState<Set<string>>(new Set());
+    // View-once popup state
     const [viewingOnceMessage, setViewingOnceMessage] = useState<string | null>(null);
 
     // View-once sending option (only for single images)
@@ -213,16 +213,29 @@ export default function ChatPage() {
             }
         };
 
+        // Listen for view-once message being viewed (real-time update for sender)
+        const handleMessageViewed = (data: { conversationId: string; messageId: string; viewedAt: string }) => {
+            if (data.conversationId === conversationId) {
+                setMessages((prev) => prev.map(m =>
+                    m.id === data.messageId
+                        ? { ...m, viewedAt: data.viewedAt }
+                        : m
+                ));
+            }
+        };
+
         socket.on('message:new', handleNewMessage);
         socket.on('typing:start', handleTypingStart);
         socket.on('typing:stop', handleTypingStop);
         socket.on('message:deleted', handleMessageDeleted);
+        socket.on('message:viewed', handleMessageViewed);
 
         return () => {
             socket.off('message:new', handleNewMessage);
             socket.off('typing:start', handleTypingStart);
             socket.off('typing:stop', handleTypingStop);
             socket.off('message:deleted', handleMessageDeleted);
+            socket.off('message:viewed', handleMessageViewed);
         };
     }, [socket, conversationId, user?.id]);
 
@@ -620,7 +633,12 @@ export default function ChatPage() {
                                     </div>
                                 )}
                                 <div
-                                    onClick={() => handleMessagePress(message.id)}
+                                    onClick={() => {
+                                        // Don't show delete menu for view-once messages
+                                        if (!message.isViewOnce) {
+                                            handleMessagePress(message.id);
+                                        }
+                                    }}
                                     className={`max-w-[70%] px-4 py-2 rounded-2xl cursor-pointer select-none ${isOwn
                                         ? 'bg-primary text-primary-foreground rounded-br-md'
                                         : 'bg-muted rounded-bl-md'
@@ -631,24 +649,27 @@ export default function ChatPage() {
                                             {isOwn ? 'You deleted this message' : 'This message was deleted'}
                                         </p>
                                     ) : message.isViewOnce ? (
-                                        // View-once message handling
-                                        viewedOnceMessages.has(message.id) ? (
-                                            // Already viewed - show "Photo" text
+                                        // View-once message handling - use server-side viewedAt
+                                        message.viewedAt ? (
+                                            // Already viewed - show "Photo" text for both sender and recipient
                                             <div className="flex items-center gap-2">
                                                 <Eye className="w-4 h-4 opacity-50" />
                                                 <p className="text-sm italic opacity-60">Photo</p>
                                             </div>
+                                        ) : isOwn ? (
+                                            // Sender sees pending state until recipient views
+                                            <div className="flex items-center gap-2 px-4 py-3">
+                                                <div className="w-8 h-8 rounded-full border-2 border-current/50 flex items-center justify-center">
+                                                    <Eye className="w-4 h-4 opacity-70" />
+                                                </div>
+                                                <span className="text-sm font-medium opacity-70">Photo</span>
+                                            </div>
                                         ) : (
-                                            // Not viewed yet - show tap to view button
+                                            // Recipient can tap to view
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if (!isOwn) {
-                                                        setViewingOnceMessage(message.id);
-                                                    } else {
-                                                        // For own messages, just show it was sent as view-once
-                                                        setViewedOnceMessages(prev => new Set([...prev, message.id]));
-                                                    }
+                                                    setViewingOnceMessage(message.id);
                                                 }}
                                                 className="flex items-center gap-2 px-6 py-4"
                                             >
@@ -946,13 +967,41 @@ export default function ChatPage() {
             {viewingOnceMessage && (() => {
                 const msg = messages.find(m => m.id === viewingOnceMessage);
                 if (!msg || !msg.media[0]) return null;
+
+                const handleCloseViewOnce = async () => {
+                    // Call API to mark as viewed
+                    if (tokens?.accessToken) {
+                        try {
+                            const res = await fetch(
+                                `${API_URL}/api/conversations/${conversationId}/messages/${viewingOnceMessage}/view`,
+                                {
+                                    method: 'POST',
+                                    headers: {
+                                        Authorization: `Bearer ${tokens.accessToken}`,
+                                    },
+                                }
+                            );
+
+                            if (res.ok) {
+                                const data = await res.json();
+                                // Update local message state with viewedAt
+                                setMessages(prev => prev.map(m =>
+                                    m.id === viewingOnceMessage
+                                        ? { ...m, viewedAt: data.data.viewedAt || new Date().toISOString() }
+                                        : m
+                                ));
+                            }
+                        } catch (error) {
+                            console.error('Error marking message as viewed:', error);
+                        }
+                    }
+                    setViewingOnceMessage(null);
+                };
+
                 return (
                     <div
                         className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-in fade-in duration-200"
-                        onClick={() => {
-                            setViewedOnceMessages(prev => new Set([...prev, viewingOnceMessage]));
-                            setViewingOnceMessage(null);
-                        }}
+                        onClick={handleCloseViewOnce}
                     >
                         <div className="absolute top-4 left-4 right-4 flex items-center justify-between text-white">
                             <div className="flex items-center gap-3">

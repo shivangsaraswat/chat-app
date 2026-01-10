@@ -22,6 +22,7 @@ const sendMessageSchema = z.object({
     ),
     mediaUrl: z.string().url().optional(),
     additionalMediaUrls: z.array(z.string().url()).optional(),
+    replyToId: z.string().uuid().optional(),  // Reply to another message
     isViewOnce: z.boolean().optional(),
     isDisappearing: z.boolean().optional(),
     expiresAt: z.string().datetime().optional(),
@@ -267,6 +268,16 @@ router.get(
                     },
                 },
                 media: true,
+                replyTo: {
+                    include: {
+                        sender: {
+                            include: {
+                                username: true,
+                                profile: true,
+                            },
+                        },
+                    },
+                },
             },
             orderBy: { createdAt: 'desc' },
             take: limit + 1,
@@ -289,6 +300,7 @@ router.get(
                     type: msg.type,
                     content: msg.isViewOnce ? null : msg.content,
                     isViewOnce: msg.isViewOnce,
+                    viewedAt: msg.viewedAt,  // Include viewedAt for view-once UI state
                     isDisappearing: msg.isDisappearing,
                     expiresAt: msg.expiresAt,
                     deletedAt: msg.deletedAt,
@@ -306,6 +318,15 @@ router.get(
                         width: m.width,
                         height: m.height,
                     })),
+                    replyTo: msg.replyTo ? {
+                        id: msg.replyTo.id,
+                        content: msg.replyTo.content,
+                        type: msg.replyTo.type,
+                        sender: {
+                            id: msg.replyTo.sender.id,
+                            displayName: msg.replyTo.sender.profile?.displayName,
+                        },
+                    } : null,
                     createdAt: msg.createdAt,
                 })),
                 nextCursor: hasMore
@@ -325,7 +346,7 @@ router.post(
         if (!req.user) throw new AppError('Unauthorized', 401);
 
         const { id } = req.params;
-        const { type, content, mediaUrl, additionalMediaUrls, isViewOnce, isDisappearing, expiresAt } =
+        const { type, content, mediaUrl, additionalMediaUrls, replyToId, isViewOnce, isDisappearing, expiresAt } =
             sendMessageSchema.parse(req.body);
 
         // Verify user is participant
@@ -380,6 +401,7 @@ router.post(
                 senderId: req.user.userId,
                 type,
                 content,
+                replyToId: replyToId || null,
                 isViewOnce: isViewOnce ?? false,
                 isDisappearing: isDisappearing ?? false,
                 expiresAt: expiresAt ? new Date(expiresAt) : null,
@@ -438,6 +460,83 @@ router.post(
                 id: message.id,
                 createdAt: message.createdAt,
             },
+        });
+    })
+);
+
+// Mark view-once message as viewed
+router.post(
+    '/:id/messages/:messageId/view',
+    authMiddleware,
+    asyncHandler(async (req: AuthRequest, res: Response) => {
+        if (!req.user) throw new AppError('Unauthorized', 401);
+
+        const { id: conversationId, messageId } = req.params;
+
+        // Verify user is participant in conversation
+        const participant = await prisma.conversationParticipant.findFirst({
+            where: {
+                conversationId,
+                userId: req.user.userId,
+                leftAt: null,
+            },
+        });
+
+        if (!participant) {
+            throw new AppError('Conversation not found', 404);
+        }
+
+        // Get the message
+        const message = await prisma.message.findFirst({
+            where: {
+                id: messageId,
+                conversationId,
+            },
+        });
+
+        if (!message) {
+            throw new AppError('Message not found', 404);
+        }
+
+        // Validate it's a view-once message
+        if (!message.isViewOnce) {
+            throw new AppError('Message is not view-once', 400);
+        }
+
+        // Check if already viewed - media already deleted
+        if (message.viewedAt) {
+            return res.json({
+                success: true,
+                data: { alreadyViewed: true, viewedAt: message.viewedAt },
+            });
+        }
+
+        // Only recipient can mark as viewed (not the sender)
+        if (message.senderId === req.user.userId) {
+            throw new AppError('Sender cannot view their own view-once message', 400);
+        }
+
+        // Delete the media from database (stronger security - can't be retrieved)
+        await prisma.messageMedia.deleteMany({
+            where: { messageId },
+        });
+
+        // Mark as viewed atomically
+        const updated = await prisma.message.update({
+            where: { id: messageId },
+            data: { viewedAt: new Date() },
+        });
+
+        // Emit socket event to notify sender that message was viewed
+        io.to(`conversation:${conversationId}`).emit('message:viewed', {
+            conversationId,
+            messageId,
+            viewedAt: updated.viewedAt,
+        });
+
+        res.json({
+            success: true,
+            data: { viewedAt: updated.viewedAt },
         });
     })
 );
