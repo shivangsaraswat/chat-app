@@ -134,12 +134,18 @@ router.post(
         const otp = await OtpService.generateOtp(user.id);
 
         // Send OTP
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`📧 Verification OTP for ${email}: ${otp}`);
-        } else {
-            EmailService.sendOtpEmail(email, otp).catch((err) => {
-                console.error('Failed to send verification email:', err.message);
-            });
+        try {
+            await EmailService.sendOtpEmail(email, otp);
+            console.log(`📧 Sent Verification OTP to ${email}`);
+        } catch (error) {
+            console.error('Failed to send verification email:', error);
+            // Fallback to logging for dev/testing if email fails
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`📧 [DEV FALLBACK] Verification OTP for ${email}: ${otp}`);
+            } else {
+                // In production, we might want to throw an error so the user knows
+                throw new AppError('Failed to send verification email. Please try again later.', 500);
+            }
         }
 
         res.status(201).json({
@@ -204,6 +210,101 @@ router.post(
                     email: user.email,
                     username: user.username?.username,
                     displayName: user.profile?.displayName,
+                    isAdmin: user.isAdmin,
+                },
+            },
+        });
+    })
+);
+
+// ===========================================
+// Request OTP (Passwordless Login / Admin)
+// ===========================================
+router.post(
+    '/request-otp',
+    authRateLimiter,
+    asyncHandler(async (req, res: Response) => {
+        const { email } = forgotPasswordSchema.parse(req.body); // Reusing schema with just email
+
+        const user = await prisma.user.findUnique({
+            where: { email },
+        });
+
+        if (!user) {
+            // Return success to prevent email enumeration
+            res.json({
+                success: true,
+                message: 'If an account exists with this email, an OTP will be sent.',
+            });
+            return;
+        }
+
+        // Generate and send OTP
+        const otp = await OtpService.generateOtp(user.id);
+
+        try {
+            await EmailService.sendOtpEmail(email, otp);
+            console.log(`🔐 Sent Login OTP to ${email}`);
+        } catch (error) {
+            console.error('Failed to send login OTP:', error);
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`🔐 [DEV FALLBACK] Login OTP for ${email}: ${otp}`);
+            } else {
+                throw new AppError('Failed to send login code. Please try again later.', 500);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'If an account exists with this email, an OTP will be sent.',
+        });
+    })
+);
+
+// ===========================================
+// Verify OTP (Passwordless Login / Admin)
+// ===========================================
+router.post(
+    '/verify-otp',
+    authRateLimiter,
+    asyncHandler(async (req, res: Response) => {
+        const { email, otp } = verifyEmailSchema.parse(req.body); // Reusing schema
+
+        const user = await prisma.user.findUnique({
+            where: { email },
+            include: {
+                username: true,
+                profile: true,
+            },
+        });
+
+        if (!user) {
+            throw new AppError('Invalid credentials', 401);
+        }
+
+        const isValid = await OtpService.verifyOtp(user.id, otp);
+
+        if (!isValid) {
+            throw new AppError('Invalid or expired OTP', 401);
+        }
+
+        // Generate tokens
+        const tokens = await JwtService.createTokenPair(
+            user.id,
+            user.email,
+            user.isAdmin
+        );
+
+        res.json({
+            success: true,
+            data: {
+                ...tokens,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    username: user.username?.username,
+                    displayName: user.profile?.displayName,
+                    photoUrl: user.profile?.photoUrl,
                     isAdmin: user.isAdmin,
                 },
             },
@@ -386,13 +487,14 @@ router.post(
         });
 
         // Send PIN
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`🔑 Password reset PIN for ${email}: ${pin}`);
-        } else {
-            // TODO: Create dedicated email template for password reset
-            EmailService.sendOtpEmail(email, pin).catch((err) => {
-                console.error('Failed to send reset PIN:', err.message);
-            });
+        try {
+            await EmailService.sendOtpEmail(email, pin);
+            console.log(`📧 Sent Password Reset PIN to ${email}`);
+        } catch (error) {
+            console.error('Failed to send reset PIN:', error);
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`🔑 [DEV FALLBACK] Password reset PIN for ${email}: ${pin}`);
+            }
         }
 
         res.json({
@@ -484,12 +586,16 @@ router.post(
         // Generate and send OTP
         const otp = await OtpService.generateOtp(user.id);
 
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`📧 Resent OTP for ${email}: ${otp}`);
-        } else {
-            EmailService.sendOtpEmail(email, otp).catch((err) => {
-                console.error('Failed to resend OTP:', err.message);
-            });
+        try {
+            await EmailService.sendOtpEmail(email, otp);
+            console.log(`📧 Resent OTP to ${email}`);
+        } catch (error) {
+            console.error('Failed to resend OTP:', error);
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`📧 [DEV FALLBACK] Resent OTP for ${email}: ${otp}`);
+            } else {
+                throw new AppError('Failed to send verification email. Please try again later.', 500);
+            }
         }
 
         res.json({

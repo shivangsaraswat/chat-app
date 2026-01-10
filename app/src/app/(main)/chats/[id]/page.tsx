@@ -482,6 +482,8 @@ export default function ChatPage() {
 
     // Delete message
     const handleDeleteMessage = async (forEveryone: boolean) => {
+        if (!tokens?.accessToken) return;
+
         try {
             const res = await fetch(
                 `${API_URL}/api/conversations/${conversationId}/messages/${selectedMessage}`,

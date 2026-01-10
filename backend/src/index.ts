@@ -21,7 +21,7 @@ import uploadRoutes from './routes/upload.routes.js';
 // Load environment variables
 dotenv.config();
 
-const app = express();
+const app: express.Application = express();
 const httpServer = createServer(app);
 
 // Socket.IO setup
@@ -69,7 +69,7 @@ app.use(errorHandler);
 initSocketServer(io);
 
 // Start server
-const PORT = process.env.WS_PORT || 4000;
+const PORT = process.env.PORT || process.env.WS_PORT || 4000;
 
 httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);

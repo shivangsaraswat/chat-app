@@ -24,14 +24,14 @@ export class JwtService {
         const { jwtSecret } = this.getSecrets();
         const expiresIn = process.env.JWT_EXPIRES_IN || '15m';
 
-        return jwt.sign(payload, jwtSecret, { expiresIn });
+        return jwt.sign(payload, jwtSecret, { expiresIn: expiresIn as any });
     }
 
     static generateRefreshToken(payload: TokenPayload): string {
         const { refreshSecret } = this.getSecrets();
         const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-        return jwt.sign(payload, refreshSecret, { expiresIn });
+        return jwt.sign(payload, refreshSecret, { expiresIn: expiresIn as any });
     }
 
     static async createTokenPair(userId: string, email: string, isAdmin: boolean) {
