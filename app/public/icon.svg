@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0a"/>
+      <stop offset="100%" style="stop-color:#171717"/>
+    </linearGradient>
+    <linearGradient id="bubbleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGradient)"/>
+  
+  <!-- Main chat bubble -->
+  <g filter="url(#glow)">
+    <path d="M256 96C162.144 96 86 165.308 86 250.667C86 297.867 110.144 339.733 148.288 367.467L128 416L192.256 390.4C211.84 397.867 233.344 402 256 402C349.856 402 426 332.692 426 247.333C426 162.641 349.856 96 256 96Z" fill="url(#bubbleGradient)"/>
+  </g>
+  
+  <!-- Chat dots -->
+  <circle cx="186" cy="250" r="24" fill="white" opacity="0.95"/>
+  <circle cx="256" cy="250" r="24" fill="white" opacity="0.95"/>
+  <circle cx="326" cy="250" r="24" fill="white" opacity="0.95"/>
+</svg>
